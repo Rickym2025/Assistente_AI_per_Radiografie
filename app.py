@@ -2,7 +2,6 @@ from PIL import Image
 import streamlit as st
 import google.generativeai as genai
 
-from api_key import api_key
 from configs import SYSTEM_PROMPT, SAFETY_SETTINGS, GENERATION_CONFIG, MODEL_NAME
 
 
