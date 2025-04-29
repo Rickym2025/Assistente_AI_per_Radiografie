@@ -9,7 +9,7 @@ import google.generativeai as genai
 import os
 import time
 from io import BytesIO # <--- SPOSTATO QUI ALL'INIZIO!
-import PyPDF # Assicurati sia nel requirements.txt se usi PDF
+import PyPDF2 # Assicurati sia nel requirements.txt se usi PDF
 import tempfile # Assicurati sia nel requirements.txt se usi PDF
 from google.api_core import exceptions # Assicurati sia nel requirements.txt
 
