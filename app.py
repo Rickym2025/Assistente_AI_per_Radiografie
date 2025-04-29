@@ -7,18 +7,13 @@ import os
 
 # --- Importa Configurazioni ---
 # Assicurati di avere un file 'configs.py' con le costanti appropriate.
-# Esempio di modifiche a configs.py per l'italiano:
-# SYSTEM_PROMPT = "Sei un assistente AI specializzato nell'analisi preliminare di immagini radiografiche. **Rispondi sempre in ITALIANO.** Fornisci osservazioni generali sui possibili risultati visibili nell'immagine/immagini. NON FARE DIAGNOSI. Sottolinea sempre che l'analisi è preliminare e richiede conferma da un radiologo qualificato."
-# SAFETY_SETTINGS = [...] # Adatte a contesto medico
-# GENERATION_CONFIG = {...} # Adatte a risposte descrittive
-# MODEL_NAME = 'gemini-1.5-flash'
-
 try:
     from configs import SYSTEM_PROMPT, SAFETY_SETTINGS, GENERATION_CONFIG, MODEL_NAME
+    # Assicurati che SYSTEM_PROMPT in configs.py chieda risposte in ITALIANO
+    # Esempio: SYSTEM_PROMPT = "Sei un assistente AI... Rispondi sempre in ITALIANO..."
 except ImportError:
     st.warning("File 'configs.py' non trovato. Utilizzo valori predefiniti in ITALIANO.")
     MODEL_NAME = 'gemini-1.5-flash'
-    # --- MODIFICATO SYSTEM_PROMPT DEFAULT PER ITALIANO ---
     SYSTEM_PROMPT = "Analizza l'immagine/immagini radiografica fornita. **Rispondi sempre e solo in ITALIANO.** Descrivi eventuali anomalie o punti di interesse visibili in modo strutturato. Sii cauto e ricorda esplicitamente alla fine della risposta che questa è un'analisi AI preliminare, puramente informativa e non una diagnosi medica, e che è necessario consultare un medico radiologo."
     SAFETY_SETTINGS = [
         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
@@ -27,7 +22,7 @@ except ImportError:
         {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
     ]
     GENERATION_CONFIG = {
-        "temperature": 0.45, # Leggermente più creativo ma ancora fattuale
+        "temperature": 0.45,
         "top_p": 1,
         "top_k": 32,
         "max_output_tokens": 4096,
@@ -40,12 +35,11 @@ try:
         st.error("Chiave API Gemini ('GEMINI_API_KEY') vuota trovata nei segreti. Impostala correttamente.")
         st.stop()
     genai.configure(api_key=api_key)
-
     model = genai.GenerativeModel(
         model_name=MODEL_NAME,
         safety_settings=SAFETY_SETTINGS,
         generation_config=GENERATION_CONFIG,
-        system_instruction=SYSTEM_PROMPT # Il prompt di sistema ora chiede l'italiano
+        system_instruction=SYSTEM_PROMPT
     )
 except KeyError:
     st.error("Chiave API Gemini ('GEMINI_API_KEY') non trovata nei segreti di Streamlit.")
@@ -60,9 +54,18 @@ except Exception as e:
 if __name__ == '__main__':
 
     # --- Impostazione Pagina ---
-    st.set_page_config(page_title='Assistente AI per Radiografie')
+    st.set_page_config(page_title='Assistente AI per Radiografie', layout="wide")
+
+    # --- IMMAGINE INTESTAZIONE / LANDING PAGE ---
+    header_image_url = "https://cdn.leonardo.ai/users/b9c4238e-d77c-4148-bef5-4a02da79edff/generations/c75c937c-f984-4904-8a7f-e0449604d70b/Leonardo_Phoenix_10_Create_an_image_for_a_mobile_apps_landing_3.jpg"
+    try:
+        st.image(header_image_url, use_container_width=True)
+    except Exception as img_err:
+        st.warning(f"Avviso: Impossibile caricare l'immagine di intestazione. ({img_err})", icon="🖼️")
+
     st.title('🩺 Assistente AI per Radiografie')
-    st.subheader("Analizza immagini radiografiche con l'IA (Gemini)")
+    st.markdown("Carica le tue immagini radiografiche per un'analisi preliminare basata su IA.")
+    st.markdown("---")
 
     # --- Disclaimer Medico ESSENZIALE ---
     st.error("""
@@ -73,70 +76,112 @@ if __name__ == '__main__':
     """)
     st.markdown("---")
 
-    # --- Layout Caricamento e Pulsante ---
-    col1, col2 = st.columns([1, 4])
 
-    # --- MODIFICA: Pulsante Italiano, più visibile (tipo 'primary') ---
-    with col1:
-        submit_btn = st.button(
-            'Analizza Radiografie ☢️',
-            use_container_width=True,
-            type="primary" # Rende il pulsante più prominente
-        )
+    # --- PASSO 1: CARICAMENTO IMMAGINI ---
+    st.subheader("1. Carica le Radiografie 📤")
+    st.markdown("Puoi caricare uno o più file di immagine (PNG, JPG, JPEG).")
 
-    # --- MODIFICA: File uploader per file MULTIPLI ---
-    with col2:
-        uploaded_files = st.file_uploader( # Rinominato da uploaded_file a uploaded_files
-            'Carica UNA o PIÙ Radiografie (PNG, JPG, JPEG):',
-            type=['png', 'jpg', 'jpeg'],
-            accept_multiple_files=True, # <-- MODIFICATO QUI
-            label_visibility="collapsed" # Nasconde etichetta duplicata
-        )
+    uploaded_files = st.file_uploader(
+        'Clicca per selezionare o trascina qui le immagini:',
+        type=['png', 'jpg', 'jpeg'],
+        accept_multiple_files=True,
+        label_visibility="collapsed"
+    )
 
-    # --- Layout Visualizzazione Immagini e Risposta ---
-    col3, col4 = st.columns(2)
+    # --- Area Visualizzazione Immagini Caricate e Pulsante Analisi (inferiore) ---
+    images_data = [] # Lista per conservare gli oggetti PIL Image
+    analysis_button_placeholder = st.empty() # Placeholder per il secondo pulsante
+    preview_placeholder = st.empty() # Placeholder per l'anteprima e il pulsante post-upload
 
-    # Lista per memorizzare le immagini caricate e processate
-    images_data = []
-    if uploaded_files: # Controlla se la lista non è vuota
-        with col3:
-            st.subheader("Immagini Caricate:")
-            # --- MODIFICA: Ciclo per mostrare tutte le immagini ---
+    if uploaded_files:
+        with preview_placeholder.container(): # Mostra le anteprime nel loro contenitore
+            st.markdown("---")
+            st.markdown("**Immagini Caricate:**")
+            # Usiamo colonne per un layout più compatto se ci sono poche immagini
+            cols = st.columns(min(len(uploaded_files), 4)) # Max 4 colonne di anteprime
+            col_idx = 0
             for uploaded_file in uploaded_files:
                 try:
                     img = Image.open(uploaded_file)
-                    images_data.append(img) # Aggiungi l'oggetto Immagine alla lista
-                    st.image(img, caption=f"Caricata: {uploaded_file.name}", use_column_width=True)
-                    st.markdown("---") # Separatore tra immagini
+                    images_data.append(img)
+                    with cols[col_idx % len(cols)]: # Cicla tra le colonne
+                        st.image(img, caption=f"{uploaded_file.name[:20]}..." if len(uploaded_file.name)>20 else uploaded_file.name , use_column_width=True)
+                    col_idx += 1
                 except Exception as e:
-                    st.error(f"Errore nell'apertura dell'immagine '{uploaded_file.name}': {e}")
+                    st.error(f"Errore apertura immagine '{uploaded_file.name}': {e}")
+            st.markdown("---")
 
-        # Prepara l'area per la risposta nella colonna destra (solo una volta)
-        message_placeholder = col4.empty()
-        # --- MODIFICA: Testo chat_message in italiano ---
-        message = message_placeholder.chat_message("assistant", avatar="🤖")
+            # Mostra il *secondo* pulsante dopo le anteprime
+            submit_btn_2 = st.button(
+                '🔬 Analizza Ora le Immagini Caricate!',
+                key='analyze_button_2',
+                use_container_width=True,
+                type="primary"
+            )
+    else:
+        # Se non ci sono file, mostra solo il primo pulsante
+         with analysis_button_placeholder.container():
+              st.markdown("---") # Separatore
+              st.markdown("☝️ Carica una o più immagini per iniziare.")
+              # Non mostrare il pulsante qui se non ci sono file, l'utente deve prima caricare
 
-    # --- Logica di Analisi (quando il pulsante viene premuto E almeno un'immagine è caricata) ---
-    # --- MODIFICA: Usa 'uploaded_files' e 'images_data' ---
-    if submit_btn and images_data: # Se il pulsante è premuto e abbiamo immagini valide
-        with st.spinner("🤖 Analisi IA in corso..."):
-            try:
-                # --- MODIFICA: Prepara contenuto con testo e TUTTE le immagini ---
-                content_to_send = [
-                    # Aggiunto prompt specifico in italiano per rafforzare la richiesta
-                    "Analizza le seguenti immagini radiografiche in ITALIANO, fornendo osservazioni per ciascuna se possibile, o un'analisi complessiva:",
-                ]
-                content_to_send.extend(images_data) # Aggiunge tutti gli oggetti PIL.Image
+    # --- PASSO 2: ANALIZZA (Logica + Pulsante Superiore/Inferiore) ---
 
-                # --- Chiama Gemini API ---
-                response = model.generate_content(content_to_send)
+    # Controlla se uno dei due pulsanti è stato premuto
+    # Nota: Se 'submit_btn_2' non è stato ancora creato (perché nessun file è caricato), darà errore.
+    # Gestiamo questo verificando se 'submit_btn_2' esiste nello scope locale.
+    submit_btn_1_pressed = analysis_button_placeholder.button(
+         '🔬 Avvia Analisi!',
+         key='analyze_button_1',
+         use_container_width=True,
+         type="primary",
+         disabled=not images_data # Disabilita se non ci sono immagini caricate valide
+     )
 
-                # --- Mostra Risposta ---
-                message.write(response.text) # Scrive la risposta (in italiano, si spera)
+    # Verifica se il secondo pulsante esiste ed è stato premuto
+    submit_btn_2_pressed = False
+    if 'submit_btn_2' in locals(): # Controlla se la variabile esiste
+        submit_btn_2_pressed = submit_btn_2 # Usa il valore del bottone
 
-            except Exception as e:
-                 st.error(f"Errore durante l'analisi AI: {e}")
-                 message.error("Impossibile completare l'analisi.")
+    analysis_triggered = submit_btn_1_pressed or submit_btn_2_pressed
 
-    elif submit_btn and not images_data: # Modificato per controllare images_data
-        st.warning("Per favore, carica almeno un'immagine valida prima di premere 'Analizza Radiografie'.")
+    # Placeholder per la risposta dell'AI
+    response_placeholder = st.empty()
+
+    if analysis_triggered and images_data:
+        # Nascondi i pulsanti di analisi e mostra lo spinner/risposta
+        analysis_button_placeholder.empty()
+        preview_placeholder.empty() # Nasconde anche le anteprime e il secondo bottone durante/dopo l'analisi
+
+        with response_placeholder.container():
+            st.subheader("2. Analisi IA 🤖")
+            with st.spinner("Analisi delle immagini in corso..."):
+                try:
+                    content_to_send = [
+                        "Analizza le seguenti immagini radiografiche in ITALIANO, fornendo osservazioni per ciascuna se possibile, o un'analisi complessiva:",
+                    ]
+                    content_to_send.extend(images_data)
+
+                    response = model.generate_content(content_to_send)
+
+                    # Mostra Risposta
+                    st.markdown("**Risultato Analisi Preliminare:**")
+                    # Usiamo st.markdown per una migliore resa del testo generato
+                    st.markdown(response.text)
+
+                except Exception as e:
+                     st.error(f"Errore durante l'analisi AI: {e}")
+                     st.error("Impossibile completare l'analisi.")
+
+    elif analysis_triggered and not images_data:
+        st.warning("Per favore, carica almeno un'immagine valida prima di premere 'Analizza'.")
+
+    # --- IMMAGINE FINALE IN BASSO ---
+    st.markdown("---")
+    footer_image_url = "https://cdn.leonardo.ai/users/b9c4238e-d77c-4148-bef5-4a02da79edff/generations/e7758e5e-ed2e-487c-9c55-382ed6d28106/Leonardo_Phoenix_10_Create_a_modern_welldefined_and_illustrati_3.jpg"
+    try:
+        st.image(footer_image_url, use_container_width=True) # Adatta alla larghezza
+    except Exception as img_err:
+        st.warning(f"Avviso: Impossibile caricare l'immagine finale. ({img_err})", icon="🖼️")
+
+    st.caption("Applicazione sviluppata con Streamlit e Google Gemini. Ricorda: consulta sempre un medico qualificato.")
