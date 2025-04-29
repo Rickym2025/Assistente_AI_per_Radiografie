@@ -4,13 +4,11 @@ from PIL import Image
 import streamlit as st
 import google.generativeai as genai
 import os
+import time # Aggiunto import mancante
 
 # --- Importa Configurazioni ---
-# Assicurati di avere un file 'configs.py' con le costanti appropriate.
 try:
     from configs import SYSTEM_PROMPT, SAFETY_SETTINGS, GENERATION_CONFIG, MODEL_NAME
-    # Assicurati che SYSTEM_PROMPT in configs.py chieda risposte in ITALIANO
-    # Esempio: SYSTEM_PROMPT = "Sei un assistente AI... Rispondi sempre in ITALIANO..."
 except ImportError:
     st.warning("File 'configs.py' non trovato. Utilizzo valori predefiniti in ITALIANO.")
     MODEL_NAME = 'gemini-1.5-flash'
@@ -59,8 +57,10 @@ if __name__ == '__main__':
     # --- IMMAGINE INTESTAZIONE / LANDING PAGE ---
     header_image_url = "https://cdn.leonardo.ai/users/b9c4238e-d77c-4148-bef5-4a02da79edff/generations/c75c937c-f984-4904-8a7f-e0449604d70b/Leonardo_Phoenix_10_Create_an_image_for_a_mobile_apps_landing_3.jpg"
     try:
-        st.image(header_image_url, use_container_width=True)
+        # === MODIFICA QUI: Rimosso use_container_width ===
+        st.image(header_image_url)
     except Exception as img_err:
+        # L'errore specifico ora dovrebbe sparire, ma lasciamo il try-except per altri problemi (es. URL non valido)
         st.warning(f"Avviso: Impossibile caricare l'immagine di intestazione. ({img_err})", icon="🖼️")
 
     st.title('🩺 Assistente AI per Radiografie')
@@ -89,69 +89,65 @@ if __name__ == '__main__':
     )
 
     # --- Area Visualizzazione Immagini Caricate e Pulsante Analisi (inferiore) ---
-    images_data = [] # Lista per conservare gli oggetti PIL Image
-    analysis_button_placeholder = st.empty() # Placeholder per il secondo pulsante
-    preview_placeholder = st.empty() # Placeholder per l'anteprima e il pulsante post-upload
+    images_data = []
+    analysis_button_placeholder = st.empty() # Placeholder per il primo pulsante
+    preview_placeholder = st.empty()       # Placeholder per anteprima e secondo pulsante
+
+    submit_btn_1_pressed = False # Inizializza
+    submit_btn_2_pressed = False # Inizializza
 
     if uploaded_files:
-        with preview_placeholder.container(): # Mostra le anteprime nel loro contenitore
+        with preview_placeholder.container():
             st.markdown("---")
             st.markdown("**Immagini Caricate:**")
-            # Usiamo colonne per un layout più compatto se ci sono poche immagini
-            cols = st.columns(min(len(uploaded_files), 4)) # Max 4 colonne di anteprime
+            cols = st.columns(min(len(uploaded_files), 4))
             col_idx = 0
+            images_data_buffer = [] # Usiamo un buffer temporaneo
             for uploaded_file in uploaded_files:
                 try:
-                    img = Image.open(uploaded_file)
-                    images_data.append(img)
-                    with cols[col_idx % len(cols)]: # Cicla tra le colonne
-                        st.image(img, caption=f"{uploaded_file.name[:20]}..." if len(uploaded_file.name)>20 else uploaded_file.name , use_column_width=True)
+                    # Leggi i byte e poi apri con PIL per evitare problemi con file temporanei
+                    img_bytes = uploaded_file.getvalue()
+                    img = Image.open(BytesIO(img_bytes)) # Usa BytesIO
+                    images_data_buffer.append(img) # Aggiungi al buffer
+                    with cols[col_idx % len(cols)]:
+                        # Mostra usando i byte originali per l'anteprima
+                        st.image(img_bytes, caption=f"{uploaded_file.name[:20]}..." if len(uploaded_file.name)>20 else uploaded_file.name , use_column_width=True)
                     col_idx += 1
                 except Exception as e:
                     st.error(f"Errore apertura immagine '{uploaded_file.name}': {e}")
+            images_data = images_data_buffer # Aggiorna la lista principale solo se tutto ok
             st.markdown("---")
 
-            # Mostra il *secondo* pulsante dopo le anteprime
-            submit_btn_2 = st.button(
-                '🔬 Analizza Ora le Immagini Caricate!',
-                key='analyze_button_2',
-                use_container_width=True,
-                type="primary"
-            )
-    else:
-        # Se non ci sono file, mostra solo il primo pulsante
-         with analysis_button_placeholder.container():
-              st.markdown("---") # Separatore
-              st.markdown("☝️ Carica una o più immagini per iniziare.")
-              # Non mostrare il pulsante qui se non ci sono file, l'utente deve prima caricare
+            # Mostra il secondo pulsante solo se ci sono immagini valide
+            if images_data:
+                submit_btn_2 = st.button(
+                    '🔬 Analizza Ora le Immagini Caricate!',
+                    key='analyze_button_2',
+                    use_container_width=True,
+                    type="primary"
+                )
+                submit_btn_2_pressed = submit_btn_2 # Aggiorna lo stato
 
-    # --- PASSO 2: ANALIZZA (Logica + Pulsante Superiore/Inferiore) ---
+    # Mostra il primo pulsante (potrebbe essere disabilitato)
+    # Lo mostriamo qui così è sempre visibile, ma disabilitato se non ci sono immagini
+    with analysis_button_placeholder.container():
+         st.markdown("---") # Separatore
+         submit_btn_1 = st.button(
+             '🔬 Avvia Analisi!',
+             key='analyze_button_1',
+             use_container_width=True,
+             type="primary",
+             disabled=not images_data # Disabilita se images_data è vuota
+         )
+         submit_btn_1_pressed = submit_btn_1 # Aggiorna lo stato
 
-    # Controlla se uno dei due pulsanti è stato premuto
-    # Nota: Se 'submit_btn_2' non è stato ancora creato (perché nessun file è caricato), darà errore.
-    # Gestiamo questo verificando se 'submit_btn_2' esiste nello scope locale.
-    submit_btn_1_pressed = analysis_button_placeholder.button(
-         '🔬 Avvia Analisi!',
-         key='analyze_button_1',
-         use_container_width=True,
-         type="primary",
-         disabled=not images_data # Disabilita se non ci sono immagini caricate valide
-     )
-
-    # Verifica se il secondo pulsante esiste ed è stato premuto
-    submit_btn_2_pressed = False
-    if 'submit_btn_2' in locals(): # Controlla se la variabile esiste
-        submit_btn_2_pressed = submit_btn_2 # Usa il valore del bottone
-
+    # --- PASSO 2: ANALIZZA ---
     analysis_triggered = submit_btn_1_pressed or submit_btn_2_pressed
-
-    # Placeholder per la risposta dell'AI
     response_placeholder = st.empty()
 
     if analysis_triggered and images_data:
-        # Nascondi i pulsanti di analisi e mostra lo spinner/risposta
         analysis_button_placeholder.empty()
-        preview_placeholder.empty() # Nasconde anche le anteprime e il secondo bottone durante/dopo l'analisi
+        preview_placeholder.empty()
 
         with response_placeholder.container():
             st.subheader("2. Analisi IA 🤖")
@@ -160,13 +156,12 @@ if __name__ == '__main__':
                     content_to_send = [
                         "Analizza le seguenti immagini radiografiche in ITALIANO, fornendo osservazioni per ciascuna se possibile, o un'analisi complessiva:",
                     ]
+                    # Qui usiamo la lista images_data che contiene oggetti PIL.Image validi
                     content_to_send.extend(images_data)
 
                     response = model.generate_content(content_to_send)
 
-                    # Mostra Risposta
                     st.markdown("**Risultato Analisi Preliminare:**")
-                    # Usiamo st.markdown per una migliore resa del testo generato
                     st.markdown(response.text)
 
                 except Exception as e:
@@ -180,8 +175,17 @@ if __name__ == '__main__':
     st.markdown("---")
     footer_image_url = "https://cdn.leonardo.ai/users/b9c4238e-d77c-4148-bef5-4a02da79edff/generations/e7758e5e-ed2e-487c-9c55-382ed6d28106/Leonardo_Phoenix_10_Create_a_modern_welldefined_and_illustrati_3.jpg"
     try:
-        st.image(footer_image_url, use_container_width=True) # Adatta alla larghezza
+        # === MODIFICA QUI: Rimosso use_container_width ===
+        st.image(footer_image_url)
     except Exception as img_err:
+        # L'errore specifico ora dovrebbe sparire
         st.warning(f"Avviso: Impossibile caricare l'immagine finale. ({img_err})", icon="🖼️")
 
     st.caption("Applicazione sviluppata con Streamlit e Google Gemini. Ricorda: consulta sempre un medico qualificato.")
+
+# --- Chiamata finale (assicurati sia l'ultima cosa eseguibile) ---
+# Aggiunto import di BytesIO all'inizio del file
+from io import BytesIO
+
+if __name__ == '__main__':
+    main()
