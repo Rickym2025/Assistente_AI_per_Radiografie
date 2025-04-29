@@ -1,0 +1,4 @@
+# Dipendenze per la compilazione di Pillow e altre librerie comuni
+build-essential
+libjpeg-dev
+zlib1g-dev
