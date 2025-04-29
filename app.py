@@ -262,7 +262,7 @@ def main():
     except Exception as img_err:
         st.warning(f"Avviso: Impossibile caricare l'immagine finale. ({img_err})", icon="🖼️")
 
-    st.caption("Applicazione sviluppata con Streamlit e Google Gemini. Ricorda: consulta sempre un medico qualificato.")
+    st.caption("Applicazione sviluppata con Streamlit e Google Gemini. Powered by Smart AI. Ricorda: consulta sempre un medico qualificato.")
 
 # --- Chiamata finale ---
 if __name__ == '__main__':
